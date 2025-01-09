@@ -59,6 +59,7 @@ func update_chunk(chunk_index: int, points_to_update: PackedInt32Array):
 	ground_polygon.polygon = ground_polygon_data
 	grass_polygon.polygon = grass_polygon_data
 
+#TEST
 										   #Dictionary[int, float]
 func set_heights(chunk_index: int, heights: Dictionary):
 	for point_index in heights:
