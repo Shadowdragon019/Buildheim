@@ -1,0 +1,53 @@
+[gd_scene load_steps=6 format=3 uid="uid://c38h5mr16g7jh"]
+
+[ext_resource type="PackedScene" uid="uid://bn5xgl68kms2g" path="res://player/player.tscn" id="1_kx8af"]
+[ext_resource type="Script" path="res://tests/test-collision-world/ground.gd" id="2_s5hs8"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_6abee"]
+size = Vector2(10000, 20)
+
+[sub_resource type="Gradient" id="Gradient_8v011"]
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_1wj2u"]
+gradient = SubResource("Gradient_8v011")
+width = 10000
+
+[node name="World" type="Node2D"]
+
+[node name="Player" parent="." instance=ExtResource("1_kx8af")]
+position = Vector2(0, -100)
+floor_stop_on_slope = true
+floor_block_on_wall = true
+floor_max_angle = 1.55334
+
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+visible = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D"]
+shape = SubResource("RectangleShape2D_6abee")
+disabled = true
+
+[node name="Sprite2D" type="Sprite2D" parent="StaticBody2D"]
+position = Vector2(0, 3.57628e-07)
+scale = Vector2(1, 20)
+texture = SubResource("GradientTexture1D_1wj2u")
+
+[node name="Ground" type="StaticBody2D" parent="."]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Ground"]
+script = ExtResource("2_s5hs8")
+
+[node name="CollisionPolygon2D2" type="CollisionPolygon2D" parent="Ground"]
+polygon = PackedVector2Array(0, 0, 100, -100, 100, 0)
+
+[node name="CollisionPolygon2D7" type="CollisionPolygon2D" parent="Ground"]
+position = Vector2(-300, 0)
+polygon = PackedVector2Array(200, 0, 100, -100, 100, 0)
+
+[node name="CollisionPolygon2D3" type="CollisionPolygon2D" parent="Ground"]
+position = Vector2(200, 0)
+polygon = PackedVector2Array(0, 0, 100, -400, 100, 0)
+
+[node name="CollisionPolygon2D8" type="CollisionPolygon2D" parent="Ground"]
+position = Vector2(-500, 0)
+polygon = PackedVector2Array(200, 0, 100, -400, 100, 0)

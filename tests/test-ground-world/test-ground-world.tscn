@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3 uid="uid://dd47ks6yuct3m"]
+
+[ext_resource type="Script" path="res://tests/test-ground-world/test_ground_world.gd" id="1_3y8gh"]
+[ext_resource type="PackedScene" uid="uid://bn5xgl68kms2g" path="res://player/player.tscn" id="1_fujbs"]
+
+[node name="Test Ground World" type="Node2D"]
+script = ExtResource("1_3y8gh")
+
+[node name="Player" parent="." instance=ExtResource("1_fujbs")]
+
+[node name="Ground" type="StaticBody2D" parent="."]
+
+[node name="TestCollider" type="CollisionPolygon2D" parent="Ground"]

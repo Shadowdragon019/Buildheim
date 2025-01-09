@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://bns4h8cymkqp6"]
+
+[ext_resource type="Script" path="res://object/object.gd" id="1_e012b"]
+[ext_resource type="Texture2D" uid="uid://dnkw3kdav87vf" path="res://assets/1-meter-plank.svg" id="2_yc64i"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rdjsc"]
+size = Vector2(20, 8)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_lyqda"]
+size = Vector2(20, 8)
+
+[node name="Object" type="StaticBody2D"]
+input_pickable = true
+script = ExtResource("1_e012b")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_rdjsc")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_yc64i")
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_lyqda")
+
+[connection signal="mouse_entered" from="." to="." method="_on_mouse_entered"]
+[connection signal="mouse_exited" from="." to="." method="_on_mouse_exited"]
+[connection signal="body_entered" from="Area2D" to="." method="_on_area_2d_body_entered"]
+[connection signal="body_exited" from="Area2D" to="." method="_on_area_2d_body_exited"]
