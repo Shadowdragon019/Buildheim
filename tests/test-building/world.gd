@@ -1,15 +1,5 @@
 extends Node2D
 
-# TODO
-# Only update chunks at end of frame?
-# Set point function to take into account updating a point on the edge of a chunk
-# add option to toggle snapping
-# save objects
-# add more objects
-# terrain editing
-# unload/load objects in chunks
-# add ability to copy object rotation
-
 const packed_point := preload("res://tests/test-building/point.tscn")
 const packed_object := preload("res://object/object.tscn")
 const packed_ground_shader := preload("res://tests/test-building/ground.gdshader")
@@ -59,7 +49,7 @@ func update_chunk(chunk_index: int, points_to_update: PackedInt32Array):
 	ground_polygon.polygon = ground_polygon_data
 	grass_polygon.polygon = grass_polygon_data
 
-#TEST
+
 										   #Dictionary[int, float]
 func set_heights(chunk_index: int, heights: Dictionary):
 	for point_index in heights:
