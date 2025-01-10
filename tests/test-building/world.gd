@@ -16,74 +16,38 @@ var blocking_objects : Array[Node2D] = []
 var snap_objects : Array[WorldObject] = []
 #Dictionary[int, PackedFloat32Array]
 var chunk_heights : Dictionary = {}
+#Dictionary[int, Dictionary[int, float]]
+var new_chunk_heights : Dictionary = {}
 
 
-func chunk_at_x(x: float) -> int:
+func chunk_index_at_x(x: float) -> int:
 	return floori(x / chunk_width)
 
 
 func get_height(chunk_index: int, point_index: int) -> float:
+	if new_chunk_heights.has(chunk_index) && new_chunk_heights[chunk_index].values().has(point_index):
+		return new_chunk_heights[chunk_index][point_index]
 	return chunk_heights[chunk_index][point_index]
 
 
-func update_chunk(chunk_index: int, points_to_update: PackedInt32Array):
-	var collision_polygon : CollisionPolygon2D = get_node("GroundCollision" + str(chunk_index) + "/Shape")
-	var ground_polygon : Polygon2D = get_node("GroundCollision" + str(chunk_index) + "/Ground")
-	var grass_polygon : Polygon2D = get_node("GroundCollision" + str(chunk_index) + "/Grass")
-	
-	var collision_polygon_data := collision_polygon.polygon
-	var ground_polygon_data := ground_polygon.polygon
-	var grass_polygon_data := grass_polygon.polygon
-	
-	if points_to_update.is_empty():
-		points_to_update = range(points_per_chunk)
-	
-	for point in points_to_update:
-		var height = chunk_heights[chunk_index][point]
-		collision_polygon_data[point + 1].y = height
-		ground_polygon_data[point + 1].y = height
-		grass_polygon_data[point].y = height
-		grass_polygon_data[(points_per_chunk + 1) * 2 - point - 1].y = height - 10
-	
-	collision_polygon.polygon = collision_polygon_data
-	ground_polygon.polygon = ground_polygon_data
-	grass_polygon.polygon = grass_polygon_data
-
-
 										   #Dictionary[int, float]
-func set_heights(chunk_index: int, heights: Dictionary):
-	for point_index in heights:
-		chunk_heights[chunk_index][point_index] = heights[point_index]
-
-
-func set_height(chunk_index: int, point_index: int, height: float):
-	chunk_heights[chunk_index][point_index] = height
+func set_heights(chunk_index: int, heights: Dictionary, smart_points: bool = true):
+	# Set data in current chunk
+	if new_chunk_heights.has(chunk_index):
+		new_chunk_heights[chunk_index].merge(heights, true)
+	else:
+		new_chunk_heights[chunk_index] = heights
+	
+	# Set other chun
+	if smart_points:
+		if heights.has(0):
+			set_heights(chunk_index - 1, {points_per_chunk: heights[0]}, false)
+		if heights.has(points_per_chunk):
+			set_heights(chunk_index + 1, {0: heights[points_per_chunk]}, false)
 
 
 func point_is_on_edge(point_index: int) -> bool:
 	return point_index == 0 || point_index == points_per_chunk
-
-
-## Return chunks that need updating
-										  #Dictionary[int, float]) -> Dictionary[int, PackedInt32Array]
-func set_points(chunk_index: int, heights: Dictionary) -> Dictionary:
-	# Dictionary[int, PackedInt32Array]
-	var chunks_that_need_updating : Dictionary = {chunk_index: PackedInt32Array()}
-	
-	for point_index in heights:
-		var _point_index : int = point_index
-		var height : float = heights[_point_index]
-		set_height(chunk_index, _point_index, height)
-		chunks_that_need_updating[chunk_index].append(point_index)
-		if point_is_on_edge(point_index):
-			if _point_index == 0:
-				set_heights(chunk_index - 1, {points_per_chunk: height})
-				chunks_that_need_updating[chunk_index - 1] = PackedInt32Array([points_per_chunk])
-			elif _point_index == points_per_chunk:
-				set_heights(chunk_index + 1, {0: height})
-				chunks_that_need_updating[chunk_index + 1] = PackedInt32Array([0])
-	
-	return chunks_that_need_updating
 
 
 func chunk_data_exists(chunk_index: int) -> bool:
@@ -195,11 +159,22 @@ func save_game():
 func _ready():
 	if TestBuildingGlobal.load_game:
 		load_game()
-	set_heights(0, {points_per_chunk: 0})
-	set_heights(1, {0: 0})
-	update_chunk(0, [points_per_chunk])
-	update_chunk(1, [0])
-
+	
+	# Dictionary[int, float]
+	new_chunk_heights.merge({
+		0: {
+			10: 0,
+			11: 0,
+			12: 0,
+			13: 0,
+			14: 0,
+			-1: 0,
+			points_per_chunk + 1: 0,
+			0: chunk_bottom + 1
+		},
+		1000: {}
+	}, true)
+	set_heights(0, {points_per_chunk: -100})
 
 func _process(_delta: float):
 	if Input.is_action_just_pressed("forwards") && TestBuildingGlobal.building_mode_enabled:
@@ -245,14 +220,58 @@ func _process(_delta: float):
 	
 	# Load chunks around player
 	for i in range(7):
-		var chunk_i := i + chunk_at_x(player.global_position.x) - 3
-		if !chunk_data_exists(chunk_i):
-			load_chunk(chunk_i)
+		var chunk_index := i + chunk_index_at_x(player.global_position.x) - 3
+		if !chunk_data_exists(chunk_index):
+			load_chunk(chunk_index)
 	
+	# Updating chunks
+	#region
+	for chunk_index in new_chunk_heights:
+		var _chunk_index : int = chunk_index
+		# Dictionary[int, float]
+		var points_to_update : Dictionary = new_chunk_heights[chunk_index]
+		
+		if !chunk_heights.has(chunk_index):
+			push_warning("Attempting to modify chunk " + str(_chunk_index) + " when it does not exist. Ignoring.")
+			continue
+		
+		var collision_polygon : CollisionPolygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Shape")
+		var ground_polygon : Polygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Ground")
+		var grass_polygon : Polygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Grass")
+		var collision_polygon_data := collision_polygon.polygon
+		var ground_polygon_data := ground_polygon.polygon
+		var grass_polygon_data := grass_polygon.polygon
+		
+		for point_index in points_to_update:
+			var height : float = points_to_update[point_index]
+			if point_index < 0:
+				push_warning("Attempting to modify point (" + str(_chunk_index) + ", " + str(point_index) + ") with point index smaller then minimum, 0. Ignoring.")
+				continue
+			if point_index > points_per_chunk:
+				push_warning("Attempting to modify point (" + str(_chunk_index) + ", " + str(point_index) + ") with point index bigger then maximum, " + str(points_per_chunk) + ". Ignoring.")
+				continue
+			if height > chunk_bottom:
+				push_warning("Attempting to set height of point (" + str(_chunk_index) + ", " + str(point_index) + " which is below chunk bottom, " + str(chunk_bottom) + ". Ignoring.")
+				continue
+			
+			chunk_heights[chunk_index][point_index] = height
+			collision_polygon_data[point_index + 1].y = height
+			ground_polygon_data[point_index + 1].y = height
+			grass_polygon_data[point_index].y = height
+			grass_polygon_data[(points_per_chunk + 1) * 2 - point_index - 1].y = height - 10
+		
+		collision_polygon.polygon = collision_polygon_data
+		ground_polygon.polygon = ground_polygon_data
+		grass_polygon.polygon = grass_polygon_data
+				
+	new_chunk_heights = {}
+	#endregion
+	
+	#THIS SHOULD BE AT THE END OF THIS FUNCTION
 	# Save
 	if Input.is_action_just_pressed("save"):
 		save_game()
-		
+	#THIS SHOULD BE AT THE END OF THIS FUNCTION
 		
 func _on_preview_area_body_entered(body: Node2D):
 	if body.is_in_group("blocks_object_placement"):
