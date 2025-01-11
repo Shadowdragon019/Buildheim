@@ -3,7 +3,7 @@ extends Node2D
 const packed_point := preload("res://tests/test-building/point.tscn")
 const packed_object := preload("res://object/object.tscn")
 const packed_ground_shader := preload("res://tests/test-building/ground.gdshader")
-const chunk_bottom := 1000
+const world_bottom := 1000
 const point_width := 5
 const points_per_chunk := 400
 const chunk_width := point_width * points_per_chunk
@@ -11,7 +11,8 @@ const chunk_width := point_width * points_per_chunk
 @onready var player: CharacterBody2D = $Player
 @onready var building_preview : Sprite2D = $BuildingPreview # Shader will break if there's more then one instance
 @onready var snapping_area: Area2D = $SnappingArea
-@onready var terraforming_preview: Polygon2D = $TerraformingPreview
+@onready var terraforming_point: Polygon2D = $TerraformingPoint
+var terraforming_preview: Area2D = create_ground_piece(true)
 var object_rotation := 0.0
 var blocking_objects : Array[Node2D] = []
 var snap_objects : Array[WorldObject] = []
@@ -19,6 +20,8 @@ var snap_objects : Array[WorldObject] = []
 var chunk_heights : Dictionary = {}
 #Dictionary[int, Dictionary[int, float]]
 var new_chunk_heights : Dictionary = {}
+#Dictionary[int, Dictionary[int, float]]
+var terraforming_points : Dictionary = {}
 
 func chunk_index_at_x(x: float) -> int: 
 	@warning_ignore("narrowing_conversion")
@@ -85,54 +88,77 @@ func generate_chunk_data(chunk_index: int):
 			
 			chunk_heights_portion.append(y)
 		chunk_heights[chunk_index] = chunk_heights_portion
-		
+
+
+func create_ground_piece(is_preview: bool = false) -> Node2D:
+	var shape := CollisionPolygon2D.new()
+	var grass := Polygon2D.new()
+	var ground := Polygon2D.new()
+	var highlight := Polygon2D.new()
+	shape.name = "Shape"
+	grass.name = "Grass"
+	ground.name = "Ground"
+	highlight.name = "Highlight"
+	grass.color = Color(0, 1, 0)
+	ground.color = Color(1, 0.5, 0)
+	highlight.color = Color(0, 0, 1, 0.5)
+	
+	if is_preview:
+		var area := Area2D.new()
+		area.visible = false
+		area.add_child(shape)
+		area.add_child(grass)
+		area.add_child(ground)
+		area.add_child(highlight)
+		return area
+	else:
+		var collider := StaticBody2D.new()
+		collider.visible = false
+		collider.add_child(shape)
+		collider.add_child(grass)
+		collider.add_child(ground)
+		return collider
+
+
+func update_ground_piece(ground_piece: Node2D, heights: PackedFloat32Array):
+	var shape : CollisionPolygon2D = ground_piece.get_node("Shape")
+	var grass : Polygon2D = ground_piece.get_node("Grass")
+	var ground : Polygon2D = ground_piece.get_node("Ground")
+	var highlight : Polygon2D = ground_piece.get_node_or_null("Highlight")
+	
+	var grass_points : PackedVector2Array = []
+	grass_points.resize(heights.size() * 2)
+	var ground_points : PackedVector2Array = [Vector2((heights.size() - 1) * point_width, world_bottom), Vector2(0, world_bottom)]
+	
+	var index := -1
+	for height in heights:
+		var x : float = index * point_width
+		var y : float = height
+		index += 1
+		grass_points[index] = Vector2(x, y)
+		grass_points[(heights.size()) * 2 - index - 1] = Vector2(x, y - 10)
+		ground_points.append(Vector2(x, height))
+	
+	shape.polygon = ground_points
+	ground.polygon = ground_points
+	grass.polygon = grass_points
+	if highlight != null:
+		highlight.polygon = ground_points
+	ground_piece.visible = true
+	
 		
 func load_chunk(chunk_index: int):
 	if chunk_is_loaded(chunk_index):
 		print("Chunk " + str(chunk_index) + " already exists")
 	else:
-		var polygon := Polygon2D.new()
-		polygon.color = Color(1, 0.5, 0 ,1)
-		polygon.name = "Ground"
-		var grass_polygon := Polygon2D.new()
-		grass_polygon.color = Color(0, 1, 0 ,1)
-		grass_polygon.name = "Grass"
-		var collision := StaticBody2D.new()
-		collision.name = "GroundCollision" + str(chunk_index)
-		var shape := CollisionPolygon2D.new()
-		shape.name = "Shape"
-		collision.add_child(shape)
-		collision.add_child(polygon)
-		collision.add_child(grass_polygon)
-		
-		var ground_points : PackedVector2Array = []
-		var ground_uv : PackedVector2Array = [Vector2(0, 1)]
-		var grass_points : PackedVector2Array = []
-		grass_points.resize((points_per_chunk + 1) * 2)
-		
 		if !chunk_data_exists(chunk_index):
 			generate_chunk_data(chunk_index)
-		
-		var start_x = chunk_width * chunk_index
-		for i in range(points_per_chunk + 1):
-			var x : float = start_x + i * point_width
-			var y : float = chunk_heights[chunk_index][i]
-			grass_points[i] = Vector2(x, y)
-			grass_points[(points_per_chunk + 1) * 2 - i - 1] = Vector2(x, y - 10)
-			if i == 0:
-				ground_points.append(Vector2(x, chunk_bottom))
-			ground_points.append(Vector2(x, y))
-			if i == points_per_chunk:
-				ground_points.append(Vector2(x, chunk_bottom))
-			ground_uv.append(Vector2(0, 0))
-		ground_uv.append(Vector2(0, 1))
-		
-		shape.polygon = ground_points
-		polygon.polygon = ground_points
-		polygon.uv = ground_uv
-		grass_polygon.polygon = grass_points
-		
-		add_child(collision)
+		#gotta set x offset
+		var piece := create_ground_piece()
+		update_ground_piece(piece, chunk_heights[chunk_index])
+		add_child(piece)
+		piece.name = "GroundCollision" + str(chunk_index)
+		piece.global_position.x = chunk_index * chunk_width
 
 	
 func unload_chunk(chunk_index: int):
@@ -172,6 +198,8 @@ func save_game():
 func _ready():
 	if TestBuildingGlobal.load_game:
 		load_game()
+	add_child(terraforming_preview)
+	terraforming_preview.modulate = Color(1, 1, 1, 0.5)
 	
 	# Dictionary[int, float]
 	set_heights(0, {
@@ -181,13 +209,14 @@ func _ready():
 		397: 0,
 		396: 0,
 	})
-
-	
-
+	set_heights(1, {
+		10: 0
+	})
+	update_ground_piece(terraforming_preview, [-100, -110, -120, -130, -140])
+	terraforming_preview.global_position.x = 100
 
 func _process(_delta: float):
 	var global_mouse_position := get_global_mouse_position()
-	
 	# Building
 	#region
 	if Input.is_action_just_pressed("forwards") && TestBuildingGlobal.building_enabled:
@@ -230,19 +259,24 @@ func _process(_delta: float):
 	if Input.is_action_just_released("right_click") && !TestBuildingGlobal.objects_over_mouse.is_empty() && TestBuildingGlobal.building_enabled:
 		TestBuildingGlobal.last_oom().queue_free()
 		TestBuildingGlobal.objects_over_mouse.remove_at(TestBuildingGlobal.last_oom_index())
+		
 	#endregion
 	
 	# Terraforming
 	#region
-	terraforming_preview.visible = TestBuildingGlobal.terraforming_enabled
+	terraforming_point.visible = TestBuildingGlobal.terraforming_enabled
 	if TestBuildingGlobal.terraforming_enabled:
-		terraforming_preview.global_position = Vector2(int(global_mouse_position.x / point_width) * point_width, global_mouse_position.y)
+		var terraform_chunk_index := chunk_index_at_x(terraforming_point.global_position.x)
+		var terraform_point_index := point_index_at_x(terraforming_point.global_position.x)
 		
-		if Input.is_action_just_pressed("left_click") && global_mouse_position.y < chunk_bottom:
-			print("e")
-			set_heights(chunk_index_at_x(terraforming_preview.global_position.x), {
-				int(terraforming_preview.global_position.x / point_width): terraforming_preview.global_position.y
-			})
+		terraforming_point.global_position = Vector2(int((global_mouse_position.x + float(point_width) / 2.0) / point_width) * point_width, global_mouse_position.y)
+		
+		if terraforming_point.global_position.y > world_bottom - 5:
+			terraforming_point.global_position.y = world_bottom - 5
+		
+		if Input.is_action_just_pressed("left_click"):
+			set_heights(terraform_chunk_index, {terraform_point_index: terraforming_point.global_position.y})
+			
 	#endregion
 	
 	# Load chunks around player
@@ -256,41 +290,16 @@ func _process(_delta: float):
 	for chunk_index in new_chunk_heights:
 		var _chunk_index : int = chunk_index
 		# Dictionary[int, float]
-		var points_to_update : Dictionary = new_chunk_heights[chunk_index]
+		var chunk_piece : StaticBody2D = get_node("GroundCollision" + str(_chunk_index))
+		var points : PackedFloat32Array = chunk_heights[chunk_index]
+		# Dictionary[int, float]
+		var new_points : Dictionary = new_chunk_heights[chunk_index]
 		
-		if !chunk_heights.has(chunk_index):
-			push_warning("Attempting to modify chunk " + str(_chunk_index) + " when it does not exist. Ignoring.")
-			continue
-		
-		var collision_polygon : CollisionPolygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Shape")
-		var ground_polygon : Polygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Ground")
-		var grass_polygon : Polygon2D = get_node("GroundCollision" + str(_chunk_index) + "/Grass")
-		var collision_polygon_data := collision_polygon.polygon
-		var ground_polygon_data := ground_polygon.polygon
-		var grass_polygon_data := grass_polygon.polygon
-		
-		for point_index in points_to_update:
-			var height : float = points_to_update[point_index]
-			if point_index < 0:
-				push_warning("Attempting to modify point (" + str(_chunk_index) + ", " + str(point_index) + ") with point index smaller then minimum, 0. Ignoring.")
-				continue
-			if point_index > points_per_chunk:
-				push_warning("Attempting to modify point (" + str(_chunk_index) + ", " + str(point_index) + ") with point index bigger then maximum, " + str(points_per_chunk) + ". Ignoring.")
-				continue
-			if height > chunk_bottom:
-				push_warning("Attempting to set height of point (" + str(_chunk_index) + ", " + str(point_index) + " which is below chunk bottom, " + str(chunk_bottom) + ". Ignoring.")
-				continue
-			
-			chunk_heights[chunk_index][point_index] = height
-			collision_polygon_data[point_index + 1].y = height
-			ground_polygon_data[point_index + 1].y = height
-			grass_polygon_data[point_index].y = height
-			grass_polygon_data[(points_per_chunk + 1) * 2 - point_index - 1].y = height - 10
-		
-		collision_polygon.polygon = collision_polygon_data
-		ground_polygon.polygon = ground_polygon_data
-		grass_polygon.polygon = grass_polygon_data
-				
+		for point_index in new_points:
+			points[point_index] = new_points[point_index]
+	
+		update_ground_piece(chunk_piece, points)
+	
 	new_chunk_heights = {}
 	#endregion
 	
