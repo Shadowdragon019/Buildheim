@@ -10,9 +10,9 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	var new_zoom: float = camera.zoom.x
-	if Input.is_action_just_pressed("forwards") && !TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("forwards") && !TestBuildingGlobal.building_enabled:
 		new_zoom += 10.0 * delta
-	if Input.is_action_just_pressed("back") && !TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("back") && !TestBuildingGlobal.building_enabled:
 		new_zoom += -10.0 * delta
 	if new_zoom < 0.05:
 		new_zoom = 0.05

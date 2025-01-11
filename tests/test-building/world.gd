@@ -4,13 +4,14 @@ const packed_point := preload("res://tests/test-building/point.tscn")
 const packed_object := preload("res://object/object.tscn")
 const packed_ground_shader := preload("res://tests/test-building/ground.gdshader")
 const chunk_bottom := 1000
-const chunk_point_width := 5
+const point_width := 5
 const points_per_chunk := 400
-const chunk_width := chunk_point_width * points_per_chunk
+const chunk_width := point_width * points_per_chunk
 
 @onready var player: CharacterBody2D = $Player
-@onready var preview : Sprite2D = $Preview # Shader will break if there's more then one instance
+@onready var building_preview : Sprite2D = $BuildingPreview # Shader will break if there's more then one instance
 @onready var snapping_area: Area2D = $SnappingArea
+@onready var terraforming_preview: Polygon2D = $TerraformingPreview
 var object_rotation := 0.0
 var blocking_objects : Array[Node2D] = []
 var snap_objects : Array[WorldObject] = []
@@ -19,9 +20,20 @@ var chunk_heights : Dictionary = {}
 #Dictionary[int, Dictionary[int, float]]
 var new_chunk_heights : Dictionary = {}
 
+func chunk_index_at_x(x: float) -> int: 
+	@warning_ignore("narrowing_conversion")
+	var chunk_index : int = x / chunk_width
+	if x < 0:
+		chunk_index -= 1
+	return chunk_index
 
-func chunk_index_at_x(x: float) -> int:
-	return floori(x / chunk_width)
+
+func point_index_at_x(x: float) -> int:
+	@warning_ignore("integer_division")
+	var point_index := (int(x + float(point_width) / 2.0) % chunk_width) / point_width
+	if point_index < 0:
+		point_index += points_per_chunk
+	return point_index
 
 
 func get_height(chunk_index: int, point_index: int) -> float:
@@ -38,7 +50,7 @@ func set_heights(chunk_index: int, heights: Dictionary, smart_points: bool = tru
 	else:
 		new_chunk_heights[chunk_index] = heights
 	
-	# Set other chun
+	# Set other chunk
 	if smart_points:
 		if heights.has(0):
 			set_heights(chunk_index - 1, {points_per_chunk: heights[0]}, false)
@@ -66,7 +78,7 @@ func generate_chunk_data(chunk_index: int):
 		var chunk_heights_portion : PackedFloat32Array = []
 		var start_x = chunk_width * chunk_index
 		for i in range(points_per_chunk + 1):
-			var x : float = start_x + i * chunk_point_width
+			var x : float = start_x + i * point_width
 			var y : float = sin(x/100.0) * 250.0
 			#if sin(x/2500.0) < 0:
 				#y += sin(x/2500.0) * 2500.0
@@ -103,7 +115,7 @@ func load_chunk(chunk_index: int):
 		
 		var start_x = chunk_width * chunk_index
 		for i in range(points_per_chunk + 1):
-			var x : float = start_x + i * chunk_point_width
+			var x : float = start_x + i * point_width
 			var y : float = chunk_heights[chunk_index][i]
 			grass_points[i] = Vector2(x, y)
 			grass_points[(points_per_chunk + 1) * 2 - i - 1] = Vector2(x, y - 10)
@@ -143,6 +155,7 @@ func load_game():
 
 
 func save_game():
+	print("Saving!")
 	var save := FileAccess.open("user://save.json", FileAccess.WRITE)
 	var data := {
 		"player_position": {
@@ -161,62 +174,76 @@ func _ready():
 		load_game()
 	
 	# Dictionary[int, float]
-	new_chunk_heights.merge({
-		0: {
-			10: 0,
-			11: 0,
-			12: 0,
-			13: 0,
-			14: 0,
-			-1: 0,
-			points_per_chunk + 1: 0,
-			0: chunk_bottom + 1
-		},
-		1000: {}
-	}, true)
-	set_heights(0, {points_per_chunk: -100})
+	set_heights(0, {
+		400: 0,
+		399: 0,
+		398: 0,
+		397: 0,
+		396: 0,
+	})
+
+	
+
 
 func _process(_delta: float):
-	if Input.is_action_just_pressed("forwards") && TestBuildingGlobal.building_mode_enabled:
+	var global_mouse_position := get_global_mouse_position()
+	
+	# Building
+	#region
+	if Input.is_action_just_pressed("forwards") && TestBuildingGlobal.building_enabled:
 		object_rotation += PI/8.0
-	if Input.is_action_just_pressed("back") && TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("back") && TestBuildingGlobal.building_enabled:
 		object_rotation += -PI/8.0
 	
-	preview.global_position = get_global_mouse_position()
-	preview.rotation = object_rotation
+	building_preview.global_position = global_mouse_position
+	building_preview.rotation = object_rotation
 	snapping_area.rotation = object_rotation
-	preview.visible = TestBuildingGlobal.building_mode_enabled
-	snapping_area.visible = TestBuildingGlobal.building_mode_enabled
+	building_preview.visible = TestBuildingGlobal.building_enabled
+	snapping_area.visible = TestBuildingGlobal.building_enabled
 	
-	if Input.is_action_just_pressed("index_right") && TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("index_right") && TestBuildingGlobal.building_enabled:
 		TestBuildingGlobal.snap_point_index -= 1
 		if TestBuildingGlobal.snap_point_index < 0:
 			TestBuildingGlobal.snap_point_index = TestBuildingGlobal.object_snap_points.size() - 1
-	if Input.is_action_just_pressed("index_left") && TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("index_left") && TestBuildingGlobal.building_enabled:
 		TestBuildingGlobal.snap_point_index += 1
 		if TestBuildingGlobal.snap_point_index >= TestBuildingGlobal.object_snap_points.size():
 			TestBuildingGlobal.snap_point_index = 0
-	preview.global_position = preview.to_global(TestBuildingGlobal.object_snap_points[TestBuildingGlobal.snap_point_index])
-	snapping_area.global_position = get_global_mouse_position()
+	building_preview.global_position = building_preview.to_global(TestBuildingGlobal.object_snap_points[TestBuildingGlobal.snap_point_index])
+	snapping_area.global_position = global_mouse_position
 	
 	for snap_object in snap_objects:
 		for snap_point in snap_object.snap_points:
 			var distance := snapping_area.global_position.distance_to(snap_point)
 			if distance < 2:
-				preview.global_position = snap_point
-				preview.global_position = preview.to_global(TestBuildingGlobal.object_snap_points[TestBuildingGlobal.snap_point_index])
+				building_preview.global_position = snap_point
+				building_preview.global_position = building_preview.to_global(TestBuildingGlobal.object_snap_points[TestBuildingGlobal.snap_point_index])
 				break
 	
 	# Place object
-	if Input.is_action_just_pressed("left_click") && TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_pressed("left_click") && TestBuildingGlobal.building_enabled:
 		var object : StaticBody2D = packed_object.instantiate()
-		object.global_position = preview.global_position
-		object.global_rotation = preview.global_rotation
+		object.global_position = building_preview.global_position
+		object.global_rotation = building_preview.global_rotation
 		add_child(object)
 	# Remove object
-	if Input.is_action_just_released("right_click") && !TestBuildingGlobal.objects_over_mouse.is_empty() && TestBuildingGlobal.building_mode_enabled:
+	if Input.is_action_just_released("right_click") && !TestBuildingGlobal.objects_over_mouse.is_empty() && TestBuildingGlobal.building_enabled:
 		TestBuildingGlobal.last_oom().queue_free()
 		TestBuildingGlobal.objects_over_mouse.remove_at(TestBuildingGlobal.last_oom_index())
+	#endregion
+	
+	# Terraforming
+	#region
+	terraforming_preview.visible = TestBuildingGlobal.terraforming_enabled
+	if TestBuildingGlobal.terraforming_enabled:
+		terraforming_preview.global_position = Vector2(int(global_mouse_position.x / point_width) * point_width, global_mouse_position.y)
+		
+		if Input.is_action_just_pressed("left_click") && global_mouse_position.y < chunk_bottom:
+			print("e")
+			set_heights(chunk_index_at_x(terraforming_preview.global_position.x), {
+				int(terraforming_preview.global_position.x / point_width): terraforming_preview.global_position.y
+			})
+	#endregion
 	
 	# Load chunks around player
 	for i in range(7):
@@ -267,23 +294,21 @@ func _process(_delta: float):
 	new_chunk_heights = {}
 	#endregion
 	
-	#THIS SHOULD BE AT THE END OF THIS FUNCTION
 	# Save
 	if Input.is_action_just_pressed("save"):
 		save_game()
-	#THIS SHOULD BE AT THE END OF THIS FUNCTION
 		
 func _on_preview_area_body_entered(body: Node2D):
 	if body.is_in_group("blocks_object_placement"):
 		blocking_objects.append(body)
-		preview.material.set_shader_parameter("blocked", true)
+		building_preview.material.set_shader_parameter("blocked", true)
 		
 		
 func _preview_area_body_exited(body: Node2D):
 	if body.is_in_group("blocks_object_placement"):
 		blocking_objects.erase(body)
 		if blocking_objects.is_empty():
-			preview.material.set_shader_parameter("blocked", false)
+			building_preview.material.set_shader_parameter("blocked", false)
 
 
 func _on_snapping_area_body_entered(body: Node2D):

@@ -5,8 +5,8 @@
 [sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_e2dns"]
 size = Vector2(20, 40)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_tr62l"]
-size = Vector2(20, 40)
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_5uewe"]
+height = 40.0
 
 [node name="Player" type="CharacterBody2D"]
 floor_max_angle = 1.309
@@ -23,4 +23,4 @@ texture = SubResource("PlaceholderTexture2D_e2dns")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(0, -20)
-shape = SubResource("RectangleShape2D_tr62l")
+shape = SubResource("CapsuleShape2D_5uewe")
