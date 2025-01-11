@@ -7,6 +7,7 @@ const world_bottom := 1000
 const point_width := 5
 const points_per_chunk := 400
 const chunk_width := point_width * points_per_chunk
+const ground_move_height := 20
 
 @onready var player: CharacterBody2D = $Player
 @onready var building_preview : Sprite2D = $BuildingPreview # Shader will break if there's more then one instance
@@ -33,9 +34,9 @@ func chunk_index_at_x(x: float) -> int:
 
 func point_index_at_x(x: float) -> int:
 	@warning_ignore("integer_division")
-	var point_index := (int(x + float(point_width) / 2.0) % chunk_width) / point_width
-	if point_index < 0:
-		point_index += points_per_chunk
+	var point_index := int(x) % chunk_width / point_width
+	if chunk_index_at_x(x) < 0:
+		point_index += points_per_chunk - 1
 	return point_index
 
 
@@ -107,16 +108,16 @@ func create_ground_piece(is_preview: bool = false) -> Node2D:
 		var area := Area2D.new()
 		area.visible = false
 		area.add_child(shape)
-		area.add_child(grass)
 		area.add_child(ground)
+		area.add_child(grass)
 		area.add_child(highlight)
 		return area
 	else:
 		var collider := StaticBody2D.new()
 		collider.visible = false
 		collider.add_child(shape)
-		collider.add_child(grass)
 		collider.add_child(ground)
+		collider.add_child(grass)
 		return collider
 
 
@@ -135,8 +136,8 @@ func update_ground_piece(ground_piece: Node2D, heights: PackedFloat32Array):
 		var x : float = index * point_width
 		var y : float = height
 		index += 1
-		grass_points[index] = Vector2(x, y)
-		grass_points[(heights.size()) * 2 - index - 1] = Vector2(x, y - 10)
+		grass_points[index] = Vector2(x, y - 5)
+		grass_points[(heights.size()) * 2 - index - 1] = Vector2(x, y + 5)
 		ground_points.append(Vector2(x, height))
 	
 	shape.polygon = ground_points
@@ -158,7 +159,7 @@ func load_chunk(chunk_index: int):
 		update_ground_piece(piece, chunk_heights[chunk_index])
 		add_child(piece)
 		piece.name = "GroundCollision" + str(chunk_index)
-		piece.global_position.x = chunk_index * chunk_width
+		piece.global_position.x = chunk_index * chunk_width + point_width
 
 	
 func unload_chunk(chunk_index: int):
@@ -202,18 +203,19 @@ func _ready():
 	terraforming_preview.modulate = Color(1, 1, 1, 0.5)
 	
 	# Dictionary[int, float]
-	set_heights(0, {
-		400: 0,
-		399: 0,
-		398: 0,
-		397: 0,
-		396: 0,
-	})
-	set_heights(1, {
-		10: 0
-	})
+	#set_heights(0, {
+		#400: 0,
+		#399: 0,
+		#398: 0,
+		#397: 0,
+		#396: 0,
+	#})
+	#set_heights(1, {
+		#10: 0
+	#})
 	update_ground_piece(terraforming_preview, [-100, -110, -120, -130, -140])
 	terraforming_preview.global_position.x = 100
+
 
 func _process(_delta: float):
 	var global_mouse_position := get_global_mouse_position()
@@ -266,17 +268,14 @@ func _process(_delta: float):
 	#region
 	terraforming_point.visible = TestBuildingGlobal.terraforming_enabled
 	if TestBuildingGlobal.terraforming_enabled:
-		var terraform_chunk_index := chunk_index_at_x(terraforming_point.global_position.x)
-		var terraform_point_index := point_index_at_x(terraforming_point.global_position.x)
-		
-		terraforming_point.global_position = Vector2(int((global_mouse_position.x + float(point_width) / 2.0) / point_width) * point_width, global_mouse_position.y)
-		
-		if terraforming_point.global_position.y > world_bottom - 5:
-			terraforming_point.global_position.y = world_bottom - 5
-		
+		var chunk_index := chunk_index_at_x(global_mouse_position.x)
+		var point_index := point_index_at_x(global_mouse_position.x + point_width / 2.0)
+		var current_height := get_height(chunk_index, point_index)
+		var height : float = max(min(global_mouse_position.y, world_bottom - 5, current_height + ground_move_height), current_height - ground_move_height)
+				
+		terraforming_point.global_position = Vector2(point_index * point_width + chunk_index * chunk_width, height)
 		if Input.is_action_just_pressed("left_click"):
-			set_heights(terraform_chunk_index, {terraform_point_index: terraforming_point.global_position.y})
-			
+			set_heights(chunk_index, {point_index: height})
 	#endregion
 	
 	# Load chunks around player
@@ -291,14 +290,13 @@ func _process(_delta: float):
 		var _chunk_index : int = chunk_index
 		# Dictionary[int, float]
 		var chunk_piece : StaticBody2D = get_node("GroundCollision" + str(_chunk_index))
-		var points : PackedFloat32Array = chunk_heights[chunk_index]
 		# Dictionary[int, float]
 		var new_points : Dictionary = new_chunk_heights[chunk_index]
 		
 		for point_index in new_points:
-			points[point_index] = new_points[point_index]
+			chunk_heights[chunk_index][point_index] = new_points[point_index]
 	
-		update_ground_piece(chunk_piece, points)
+		update_ground_piece(chunk_piece, chunk_heights[chunk_index])
 	
 	new_chunk_heights = {}
 	#endregion
@@ -306,6 +304,7 @@ func _process(_delta: float):
 	# Save
 	if Input.is_action_just_pressed("save"):
 		save_game()
+		
 		
 func _on_preview_area_body_entered(body: Node2D):
 	if body.is_in_group("blocks_object_placement"):
