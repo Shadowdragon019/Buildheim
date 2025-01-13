@@ -8,7 +8,7 @@ uniform vec4 dirt_color : source_color;
 
 void vertex() {
 	//world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0, 1.0)).xy;
-	
+
 }
 
 void fragment() {
@@ -18,7 +18,7 @@ void fragment() {
 	} else {
 		color = grass_color;
 	}
-	
+
 	COLOR = vec4(0, UV.y, 0.0, 1.0);
 	color.r = mix(color.r, COLOR.r, 0.5);
 	color.g = mix(color.g, COLOR.g, 0.5);

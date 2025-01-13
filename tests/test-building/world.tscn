@@ -38,13 +38,6 @@ shape = SubResource("RectangleShape2D_nfd50")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="SnappingArea"]
 shape = SubResource("RectangleShape2D_6rdb8")
 
-[node name="TerraformingPoint" type="Polygon2D" parent="."]
-visible = false
-top_level = true
-scale = Vector2(0.25, 0.25)
-color = Color(1, 1, 0, 1)
-polygon = PackedVector2Array(-5, 10, 5, 10, 10, 5, 10, -5, 5, -10, -5, -10, -10, -5, -10, 5)
-
 [connection signal="body_entered" from="BuildingPreview/PreviewArea" to="." method="_on_preview_area_body_entered"]
 [connection signal="body_exited" from="BuildingPreview/PreviewArea" to="." method="_preview_area_body_exited"]
 [connection signal="body_entered" from="SnappingArea" to="." method="_on_snapping_area_body_entered"]
