@@ -335,8 +335,8 @@ func _process(_delta: float):
 	# Save
 	if Input.is_action_just_pressed("save"):
 		save_game()
-		
-		
+
+
 func _on_preview_area_body_entered(body: Node2D):
 	if body.is_in_group("blocks_object_placement"):
 		blocking_objects.append(body)
